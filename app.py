@@ -1,17 +1,40 @@
 import streamlit as st
-import pymongo
+import asyncio
+from motor.motor_asyncio import AsyncClient
 from datetime import datetime
 import os
 
 st.set_page_config(page_title="🔧 ระบบรายงานปัญหา", page_icon="🔧", layout="wide")
 
-try:
-    client = pymongo.MongoClient(os.getenv('MONGODB_URI'))
+@st.cache_resource
+async def get_db():
+    client = AsyncClient(os.getenv('MONGODB_URI'))
     db = client['facility-reporting']
-    issues = db['issues']
-except Exception as e:
-    st.error(f"❌ ไม่สามารถเชื่อมต่อ MongoDB: {str(e)}")
-    issues = None
+    return db['issues']
+
+async def get_issues():
+    db = await get_db()
+    return await db.find().to_list(length=1000)
+
+async def insert_issue(issue_data):
+    db = await get_db()
+    result = await db.insert_one(issue_data)
+    return result.inserted_id
+
+async def find_issues(query):
+    db = await get_db()
+    return await db.find(query).to_list(length=1000)
+
+async def update_issue(report_id, status):
+    db = await get_db()
+    await db.update_one(
+        {"reportId": report_id},
+        {"$set": {"status": status, "updatedAt": datetime.now()}}
+    )
+
+async def delete_issue(report_id):
+    db = await get_db()
+    await db.delete_one({"reportId": report_id})
 
 st.title("🔧 ระบบรายงานปัญหา")
 
@@ -49,14 +72,12 @@ if st.session_state.page == "report":
     if st.button("✅ ส่ง", use_container_width=True):
         if not name or not phone or not location or not description:
             st.error("❌ กรุณากรอกทั้งหมด")
-        elif not issues:
-            st.error("❌ ไม่สามารถเชื่อมต่อ MongoDB")
         else:
             try:
                 report_id = f"RTP{int(datetime.now().timestamp())}"
                 cat_map = {"💧 น้ำรั่ว": "water", "🚽 ห้องน้ำ": "toilet", "🗑️ ถังขยะ": "trash", "💡 ไฟฟ้า": "light", "❄️ ปรับอากาศ": "hvac", "🪑 เฟอร์นิเจอร์": "furniture", "🅿️ ที่จอด": "parking", "📝 อื่นๆ": "other"}
                 
-                issues.insert_one({
+                issue_data = {
                     "reportId": report_id,
                     "reporterName": name,
                     "reporterPhone": phone,
@@ -68,7 +89,9 @@ if st.session_state.page == "report":
                     "dateSubmitted": datetime.now(),
                     "createdAt": datetime.now(),
                     "updatedAt": datetime.now()
-                })
+                }
+                
+                asyncio.run(insert_issue(issue_data))
                 st.success(f"✅ ส่งสำเร็จ! #{report_id}")
                 st.balloons()
             except Exception as e:
@@ -79,33 +102,31 @@ elif st.session_state.page == "status":
     st.subheader("📊 ติดตามสถานะ")
     search = st.text_input("🔍 ค้นหา", placeholder="ค้นหาหมายเลขรายงาน")
     
-    if not issues:
-        st.error("❌ ไม่สามารถเชื่อมต่อ MongoDB")
-    else:
-        try:
-            if search:
-                docs = list(issues.find({
-                    "$or": [
-                        {"reportId": {"$regex": search, "$options": "i"}},
-                        {"location": {"$regex": search, "$options": "i"}}
-                    ]
-                }).sort("createdAt", -1))
-            else:
-                docs = list(issues.find().sort("createdAt", -1))
-            
-            if docs:
-                for doc in docs:
-                    status_icons = {"pending": "🟡", "inprogress": "🔵", "resolved": "🟢"}
-                    status_text = {"pending": "รอตรวจสอบ", "inprogress": "กำลังแก้ไข", "resolved": "แก้ไขแล้ว"}
-                    
-                    st.write(f"{status_icons.get(doc['status'])} **#{doc['reportId']}** - {doc['location']}")
-                    st.write(f"📝 {doc['description'][:100]}...")
-                    st.write(f"👤 {doc['reporterName']} | 📱 {doc['reporterPhone']} | {status_text.get(doc['status'])}")
-                    st.divider()
-            else:
-                st.info("📭 ไม่พบรายงาน")
-        except Exception as e:
-            st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+    try:
+        if search:
+            docs = asyncio.run(find_issues({
+                "$or": [
+                    {"reportId": {"$regex": search, "$options": "i"}},
+                    {"location": {"$regex": search, "$options": "i"}}
+                ]
+            }))
+        else:
+            docs = asyncio.run(get_issues())
+        
+        if docs:
+            docs = sorted(docs, key=lambda x: x.get("createdAt", datetime.now()), reverse=True)
+            for doc in docs:
+                status_icons = {"pending": "🟡", "inprogress": "🔵", "resolved": "🟢"}
+                status_text = {"pending": "รอตรวจสอบ", "inprogress": "กำลังแก้ไข", "resolved": "แก้ไขแล้ว"}
+                
+                st.write(f"{status_icons.get(doc['status'])} **#{doc['reportId']}** - {doc['location']}")
+                st.write(f"📝 {doc['description'][:100]}...")
+                st.write(f"👤 {doc['reporterName']} | 📱 {doc['reporterPhone']} | {status_text.get(doc['status'])}")
+                st.divider()
+        else:
+            st.info("📭 ไม่พบรายงาน")
+    except Exception as e:
+        st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
 
 # ===== Admin =====
 elif st.session_state.page == "admin":
@@ -115,57 +136,52 @@ elif st.session_state.page == "admin":
     if pwd == os.getenv('ADMIN_PASSWORD', 'admin123456'):
         st.success("✅ เข้าสู่ระบบแล้ว")
         
-        if not issues:
-            st.error("❌ ไม่สามารถเชื่อมต่อ MongoDB")
-        else:
-            try:
-                docs = list(issues.find().sort("createdAt", -1))
+        try:
+            docs = asyncio.run(get_issues())
+            docs = sorted(docs, key=lambda x: x.get("createdAt", datetime.now()), reverse=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("📊 ทั้งหมด", len(docs))
+            with col2:
+                pending = len([d for d in docs if d["status"] == "pending"])
+                st.metric("🟡 รอตรวจสอบ", pending)
+            with col3:
+                inprogress = len([d for d in docs if d["status"] == "inprogress"])
+                st.metric("🔵 กำลังแก้ไข", inprogress)
+            with col4:
+                resolved = len([d for d in docs if d["status"] == "resolved"])
+                st.metric("🟢 แก้ไขแล้ว", resolved)
+            
+            st.divider()
+            
+            for doc in docs:
+                col1, col2, col3 = st.columns([2, 1, 1])
                 
-                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("📊 ทั้งหมด", len(docs))
+                    st.write(f"**#{doc['reportId']}** - {doc['location']}")
+                    st.write(f"👤 {doc['reporterName']} | 📱 {doc['reporterPhone']}")
+                
                 with col2:
-                    pending = len([d for d in docs if d["status"] == "pending"])
-                    st.metric("🟡 รอตรวจสอบ", pending)
+                    new_status = st.selectbox(
+                        "สถานะ",
+                        ["pending", "inprogress", "resolved"],
+                        index=["pending", "inprogress", "resolved"].index(doc["status"]),
+                        key=f"status_{doc['reportId']}"
+                    )
+                    if new_status != doc["status"]:
+                        asyncio.run(update_issue(doc["reportId"], new_status))
+                        st.rerun()
+                
                 with col3:
-                    inprogress = len([d for d in docs if d["status"] == "inprogress"])
-                    st.metric("🔵 กำลังแก้ไข", inprogress)
-                with col4:
-                    resolved = len([d for d in docs if d["status"] == "resolved"])
-                    st.metric("🟢 แก้ไขแล้ว", resolved)
+                    if st.button("🗑️ ลบ", key=f"del_{doc['reportId']}"):
+                        asyncio.run(delete_issue(doc["reportId"]))
+                        st.rerun()
                 
                 st.divider()
-                
-                for doc in docs:
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    
-                    with col1:
-                        st.write(f"**#{doc['reportId']}** - {doc['location']}")
-                        st.write(f"👤 {doc['reporterName']} | 📱 {doc['reporterPhone']}")
-                    
-                    with col2:
-                        new_status = st.selectbox(
-                            "สถานะ",
-                            ["pending", "inprogress", "resolved"],
-                            index=["pending", "inprogress", "resolved"].index(doc["status"]),
-                            key=f"status_{doc['reportId']}"
-                        )
-                        if new_status != doc["status"]:
-                            issues.update_one(
-                                {"reportId": doc["reportId"]},
-                                {"$set": {"status": new_status, "updatedAt": datetime.now()}}
-                            )
-                            st.rerun()
-                    
-                    with col3:
-                        if st.button("🗑️ ลบ", key=f"del_{doc['reportId']}"):
-                            issues.delete_one({"reportId": doc["reportId"]})
-                            st.rerun()
-                    
-                    st.divider()
-            
-            except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+        
+        except Exception as e:
+            st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
     
     elif pwd:
         st.error("❌ รหัสผ่านไม่ถูกต้อง")
