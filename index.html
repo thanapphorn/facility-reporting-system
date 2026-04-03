@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรายงานปัญหา</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>🔧 ระบบรายงานปัญหา</h1>
+            <p>แจ้งปัญหาสิ่งอำนวยความสะดวกเพื่อการแก้ไขอย่างรวดเร็ว</p>
+            <div style="margin-top: 12px;">
+                <a href="/admin" class="admin-link">🔐 Admin Panel</a>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('report')">ส่งรายงาน</button>
+            <button class="tab-btn" onclick="switchTab('status')">ติดตามสถานะ</button>
+        </div>
+        
+        <!-- Tab: ส่งรายงาน -->
+        <div id="report" class="tab-content active">
+            <div class="form-section">
+                <div class="form-group">
+                    <label>ชื่อผู้รายงาน *</label>
+                    <input type="text" id="reporterName" placeholder="กรอกชื่อของคุณ">
+                </div>
+                
+                <div class="form-group">
+                    <label>เบอร์โทรศัพท์ *</label>
+                    <input type="tel" id="reporterPhone" placeholder="08-XXXX-XXXX">
+                </div>
+                
+                <div class="form-group">
+                    <label>ประเภทปัญหา *</label>
+                    <div class="category-grid">
+                        <button class="category-btn" onclick="selectCategory('water')">💧 น้ำรั่ว/หยด</button>
+                        <button class="category-btn" onclick="selectCategory('toilet')">🚽 ห้องน้ำพัง</button>
+                        <button class="category-btn" onclick="selectCategory('trash')">🗑️ ถังขยะเต็ม</button>
+                        <button class="category-btn" onclick="selectCategory('light')">💡 ไฟฟ้า</button>
+                        <button class="category-btn" onclick="selectCategory('hvac')">❄️ ปรับอากาศ</button>
+                        <button class="category-btn" onclick="selectCategory('furniture')">🪑 เฟอร์นิเจอร์</button>
+                        <button class="category-btn" onclick="selectCategory('parking')">🅿️ ที่จอดรถ</button>
+                        <button class="category-btn" onclick="selectCategory('other')">📝 อื่นๆ</button>
+                    </div>
+                    <input type="hidden" id="selectedCategory">
+                </div>
+                
+                <div class="form-group">
+                    <label>สถานที่เกิดปัญหา *</label>
+                    <input type="text" id="location" placeholder="เช่น ชั้น 3, ห้อง 301">
+                </div>
+                
+                <div class="form-group">
+                    <label>รายละเอียดปัญหา *</label>
+                    <textarea id="description" placeholder="บรรยายปัญหาที่เกิดขึ้นอย่างละเอียด..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>แนบรูปภาพ/ไฟล์ (ไม่บังคับ)</label>
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label">
+                            📎 เลือกไฟล์ (รูปภาพ หรือเอกสาร)
+                            <input type="file" id="fileInput" onchange="handleFiles()" multiple>
+                        </label>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+
+                <div id="submitMessage" class="message" style="display: none;"></div>
+            </div>
+            
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="submitReport()" id="submitBtn">ส่งรายงาน</button>
+                <button class="btn" onclick="resetForm()">ล้างแบบฟอร์ม</button>
+            </div>
+        </div>
+        
+        <!-- Tab: ติดตามสถานะ -->
+        <div id="status" class="tab-content">
+            <div style="margin-bottom: 16px;">
+                <input type="text" id="searchId" placeholder="ค้นหาหมายเลขรายงาน..." style="width: 100%; padding: 10px 12px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md);">
+            </div>
+            <div id="issuesList"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedCategory = '';
+        let selectedFiles = [];
+        const API_BASE = '/api';
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            if (tabName === 'status') displayIssues();
+        }
+
+        function selectCategory(cat) {
+            selectedCategory = cat;
+            document.getElementById('selectedCategory').value = cat;
+            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('selected'));
+            event.target.classList.add('selected');
+        }
+
+        function handleFiles() {
+            const input = document.getElementById('fileInput');
+            selectedFiles = Array.from(input.files);
+            displayFileList();
+        }
+
+        function displayFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <span>📄 ${file.name.substring(0, 30)}${file.name.length > 30 ? '...' : ''}</span>
+                    <span class="file-remove" onclick="removeFile(${index})">×</span>
+                `;
+                fileList.appendChild(item);
+            });
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            displayFileList();
+        }
+
+        async function submitReport() {
+            const name = document.getElementById('reporterName').value.trim();
+            const phone = document.getElementById('reporterPhone').value.trim();
+            const location = document.getElementById('location').value.trim();
+            const description = document.getElementById('description').value.trim();
+
+            if (!name || !phone || !selectedCategory || !location || !description) {
+                showMessage('กรุณากรอกข้อมูลทั้งหมด', 'error');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'กำลังส่ง...';
+
+            try {
+                const formData = new FormData();
+                formData.append('reporterName', name);
+                formData.append('reporterPhone', phone);
+                formData.append('category', selectedCategory);
+                formData.append('location', location);
+                formData.append('description', description);
+                
+                selectedFiles.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                const response = await fetch(`${API_BASE}/issues`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(`✓ ส่งรายงานสำเร็จ! หมายเลข: ${data.reportId}`, 'success');
+                    resetForm();
+                } else {
+                    showMessage('❌ ' + (data.error || 'เกิดข้อผิดพลาด'), 'error');
+                }
+            } catch (err) {
+                showMessage('❌ เกิดข้อผิดพลาดในการส่งรายงาน', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'ส่งรายงาน';
+            }
+        }
+
+        function showMessage(msg, type) {
+            const messageDiv = document.getElementById('submitMessage');
+            messageDiv.textContent = msg;
+            messageDiv.className = 'message ' + (type === 'success' ? 'success' : 'error');
+            messageDiv.style.display = 'block';
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function resetForm() {
+            document.getElementById('reporterName').value = '';
+            document.getElementById('reporterPhone').value = '';
+            document.getElementById('location').value = '';
+            document.getElementById('description').value = '';
+            document.getElementById('fileInput').value = '';
+            document.getElementById('selectedCategory').value = '';
+            selectedCategory = '';
+            selectedFiles = [];
+            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('selected'));
+            document.getElementById('fileList').innerHTML = '';
+        }
+
+        async function displayIssues() {
+            const searchId = document.getElementById('searchId').value.toLowerCase();
+            
+            try {
+                let url = `${API_BASE}/issues`;
+                if (searchId) {
+                    url = `${API_BASE}/issues/search/${searchId}`;
+                }
+
+                const response = await fetch(url);
+                const issues = await response.json();
+
+                const list = document.getElementById('issuesList');
+                if (issues.length === 0) {
+                    list.innerHTML = '<div class="empty-state"><p>ไม่มีรายงานที่ตรงกับการค้นหา</p></div>';
+                    return;
+                }
+
+                list.innerHTML = issues.map(issue => `
+                    <div class="issue-card">
+                        <div class="issue-header">
+                            <div class="issue-title">${issue.location}</div>
+                            <div style="text-align: right;">
+                                <div class="badge badge-category">#${issue.reportId}</div>
+                            </div>
+                        </div>
+                        <div class="issue-meta">
+                            <span class="badge badge-category">📌 ${getCategoryLabel(issue.category)}</span>
+                            <span class="badge ${getStatusBadgeClass(issue.status)}">${getStatusLabel(issue.status)}</span>
+                        </div>
+                        <div class="issue-desc">${issue.description}</div>
+                        ${issue.assignedTo ? `<div style="font-size: 13px; margin: 8px 0; color: var(--color-text-secondary);">👷 ผู้รับผิดชอบ: ${issue.assignedTo}</div>` : ''}
+                        ${issue.notes ? `<div style="font-size: 13px; margin: 8px 0; padding: 8px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); color: var(--color-text-secondary);">📝 หมายเหตุ: ${issue.notes}</div>` : ''}
+                        <div class="issue-footer">
+                            <span>👤 ${issue.reporterName}</span>
+                            <span>📱 ${issue.reporterPhone}</span>
+                            <span>${new Date(issue.createdAt).toLocaleDateString('th-TH')} ${new Date(issue.createdAt).toLocaleTimeString('th-TH')}</span>
+                        </div>
+                        ${issue.files.length > 0 ? `<div style="margin-top: 8px; font-size: 12px; color: var(--color-text-secondary);">📎 ไฟล์ที่แนบ: ${issue.files.length} ไฟล์</div>` : ''}
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+                document.getElementById('issuesList').innerHTML = '<div class="empty-state"><p>❌ เกิดข้อผิดพลาดในการโหลดข้อมูล</p></div>';
+            }
+        }
+
+        function getCategoryLabel(cat) {
+            const labels = {
+                water: '💧 น้ำรั่ว/หยด',
+                toilet: '🚽 ห้องน้ำพัง',
+                trash: '🗑️ ถังขยะเต็ม',
+                light: '💡 ไฟฟ้า',
+                hvac: '❄️ ปรับอากาศ',
+                furniture: '🪑 เฟอร์นิเจอร์',
+                parking: '🅿️ ที่จอดรถ',
+                other: '📝 อื่นๆ'
+            };
+            return labels[cat] || cat;
+        }
+
+        function getStatusLabel(status) {
+            const labels = { pending: '⏳ รอการตรวจสอบ', inprogress: '🔧 กำลังแก้ไข', resolved: '✓ แก้ไขแล้ว' };
+            return labels[status] || status;
+        }
+
+        function getStatusBadgeClass(status) {
+            const classes = { pending: 'badge-pending', inprogress: 'badge-inprogress', resolved: 'badge-resolved' };
+            return classes[status] || '';
+        }
+
+        document.getElementById('searchId').addEventListener('keyup', displayIssues);
+    </script>
+</body>
+</html>

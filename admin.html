@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - ระบบรายงานปัญหา</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--color-background-primary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-lg);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 28px;
+            font-weight: 500;
+            color: var(--color-text-info);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+            margin-top: 4px;
+        }
+
+        .admin-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 8px 12px;
+            background: var(--color-background-secondary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+        }
+
+        .filter-btn.active {
+            background: var(--color-background-info);
+            border-color: var(--color-border-info);
+            color: var(--color-text-info);
+        }
+
+        .issue-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 0.5fr;
+            gap: 12px;
+            align-items: center;
+            background: var(--color-background-primary);
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md);
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+
+        .issue-info {
+            font-size: 13px;
+        }
+
+        .issue-info-title {
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .issue-info-sub {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+            margin-top: 2px;
+        }
+
+        .issue-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .action-btn {
+            padding: 6px 10px;
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md);
+            cursor: pointer;
+            font-size: 12px;
+            background: transparent;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--color-background-secondary);
+        }
+
+        .action-btn.delete {
+            border-color: var(--color-border-danger);
+            color: var(--color-text-danger);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--color-background-primary);
+            border-radius: var(--border-radius-lg);
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            cursor: pointer;
+            font-size: 20px;
+            background: none;
+            border: none;
+            color: var(--color-text-secondary);
+        }
+
+        .modal-body {
+            margin-bottom: 16px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .login-form {
+            max-width: 300px;
+            margin: 50px auto;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 0.5px solid var(--color-border-tertiary);
+            border-radius: var(--border-radius-md);
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        @media (max-width: 900px) {
+            .issue-row {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loginView" class="login-form">
+        <div class="form-section">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <h1>🔐 Admin Panel</h1>
+                <p style="color: var(--color-text-secondary); font-size: 14px;">ใส่รหัสผ่านเพื่อดำเนินการ</p>
+            </div>
+            <div class="form-group">
+                <label>รหัสผ่าน Admin</label>
+                <input type="password" id="adminPassword" placeholder="กรอกรหัสผ่าน" onkeypress="if(event.key==='Enter') login()">
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="login()" style="width: 100%;">เข้าสู่ระบบ</button>
+                <button class="btn" onclick="window.location.href='/'" style="width: 100%;">กลับหน้าหลัก</button>
+            </div>
+            <div id="loginMessage" class="message" style="display: none; margin-top: 16px;"></div>
+        </div>
+    </div>
+
+    <div id="adminView" style="display: none;">
+        <div class="app-container">
+            <div class="admin-header">
+                <div>
+                    <h1>📊 Admin Dashboard</h1>
+                    <p style="color: var(--color-text-secondary); font-size: 14px;">จัดการรายงานปัญหาทั้งหมด</p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="logout-btn" onclick="logout()">🚪 ออกจากระบบ</button>
+                </div>
+            </div>
+
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <div class="admin-actions">
+                <button class="filter-btn active" onclick="filterIssues('all')">ทั้งหมด</button>
+                <button class="filter-btn" onclick="filterIssues('pending')">⏳ รอการตรวจสอบ</button>
+                <button class="filter-btn" onclick="filterIssues('inprogress')">🔧 กำลังแก้ไข</button>
+                <button class="filter-btn" onclick="filterIssues('resolved')">✓ แก้ไขแล้ว</button>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <input type="text" id="searchAdmin" placeholder="ค้นหา..." style="width: 100%; padding: 10px 12px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md);">
+            </div>
+
+            <div id="issuesGrid"></div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>แก้ไขรายงาน</span>
+                <button class="modal-close" onclick="closeEditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>สถานะ</label>
+                    <select id="editStatus">
+                        <option value="pending">⏳ รอการตรวจสอบ</option>
+                        <option value="inprogress">🔧 กำลังแก้ไข</option>
+                        <option value="resolved">✓ แก้ไขแล้ว</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>ผู้รับผิดชอบ</label>
+                    <input type="text" id="editAssignedTo" placeholder="ชื่อผู้รับผิดชอบ">
+                </div>
+                <div class="form-group">
+                    <label>หมายเหตุ</label>
+                    <textarea id="editNotes" placeholder="เพิ่มหมายเหตุเพิ่มเติม..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeEditModal()">ยกเลิก</button>
+                <button class="btn btn-primary" onclick="saveChanges()">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let adminPassword = '';
+        let currentFilter = 'all';
+        let editingIssueId = '';
+        const API_BASE = '/api';
+
+        function login() {
+            const password = document.getElementById('adminPassword').value;
+            adminPassword = password;
+
+            if (!password) {
+                showLoginMessage('กรุณากรอกรหัสผ่าน', 'error');
+                return;
+            }
+
+            // Try to fetch to verify password
+            fetch(`${API_BASE}/admin/stats`, {
+                headers: { 'X-Admin-Password': password }
+            })
+            .then(r => {
+                if (r.status === 401) {
+                    showLoginMessage('❌ รหัสผ่านไม่ถูกต้อง', 'error');
+                } else if (r.ok) {
+                    showAdminView();
+                    loadStats();
+                    loadIssues();
+                }
+            })
+            .catch(() => showLoginMessage('❌ เกิดข้อผิดพลาด', 'error'));
+        }
+
+        function showLoginMessage(msg, type) {
+            const msgDiv = document.getElementById('loginMessage');
+            msgDiv.textContent = msg;
+            msgDiv.className = 'message ' + (type === 'success' ? 'success' : 'error');
+            msgDiv.style.display = 'block';
+        }
+
+        function showAdminView() {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('adminView').style.display = 'block';
+        }
+
+        function logout() {
+            adminPassword = '';
+            document.getElementById('loginView').style.display = 'block';
+            document.getElementById('adminView').style.display = 'none';
+            document.getElementById('adminPassword').value = '';
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/stats`, {
+                    headers: { 'X-Admin-Password': adminPassword }
+                });
+                const stats = await response.json();
+
+                const grid = document.getElementById('statsGrid');
+                grid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-number">${stats.total}</div>
+                        <div class="stat-label">รายงานทั้งหมด</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" style="color: var(--color-text-warning);">${stats.pending}</div>
+                        <div class="stat-label">⏳ รอการตรวจสอบ</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" style="color: var(--color-text-info);">${stats.inprogress}</div>
+                        <div class="stat-label">🔧 กำลังแก้ไข</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" style="color: var(--color-text-success);">${stats.resolved}</div>
+                        <div class="stat-label">✓ แก้ไขแล้ว</div>
+                    </div>
+                `;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function loadIssues() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/issues`, {
+                    headers: { 'X-Admin-Password': adminPassword }
+                });
+                const issues = await response.json();
+
+                displayIssues(issues);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function displayIssues(issues) {
+            let filtered = issues;
+
+            if (currentFilter !== 'all') {
+                filtered = issues.filter(i => i.status === currentFilter);
+            }
+
+            const search = document.getElementById('searchAdmin').value.toLowerCase();
+            if (search) {
+                filtered = filtered.filter(i => 
+                    i.reportId.toLowerCase().includes(search) ||
+                    i.location.toLowerCase().includes(search) ||
+                    i.reporterName.toLowerCase().includes(search)
+                );
+            }
+
+            const grid = document.getElementById('issuesGrid');
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="empty-state"><p>ไม่มีรายงาน</p></div>';
+                return;
+            }
+
+            grid.innerHTML = filtered.map(issue => `
+                <div class="issue-row">
+                    <div class="issue-info">
+                        <div class="issue-info-title">${issue.location}</div>
+                        <div class="issue-info-sub">#${issue.reportId}</div>
+                    </div>
+                    <div class="issue-info">
+                        <div class="issue-info-title">${issue.reporterName}</div>
+                        <div class="issue-info-sub">${issue.reporterPhone}</div>
+                    </div>
+                    <div class="issue-info">
+                        <div class="badge badge-category" style="display: inline-block;">${getCategoryLabel(issue.category)}</div>
+                        <div class="issue-info-sub">${issue.description.substring(0, 40)}...</div>
+                    </div>
+                    <div class="issue-info">
+                        <span class="badge ${getStatusBadgeClass(issue.status)}" style="display: inline-block;">${getStatusLabel(issue.status)}</span>
+                        ${issue.assignedTo ? `<div class="issue-info-sub">👷 ${issue.assignedTo}</div>` : ''}
+                    </div>
+                    <div class="issue-actions">
+                        <button class="action-btn" onclick="openEditModal('${issue.reportId}', '${issue.status}', '${issue.assignedTo || ''}', '${(issue.notes || '').replace(/'/g, "\\'")}')">✏️</button>
+                        <button class="action-btn delete" onclick="deleteIssue('${issue.reportId}')">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterIssues(status) {
+            currentFilter = status;
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            loadIssues();
+        }
+
+        function openEditModal(reportId, status, assignedTo, notes) {
+            editingIssueId = reportId;
+            document.getElementById('editStatus').value = status;
+            document.getElementById('editAssignedTo').value = assignedTo;
+            document.getElementById('editNotes').value = notes;
+            document.getElementById('editModal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('active');
+            editingIssueId = '';
+        }
+
+        async function saveChanges() {
+            const status = document.getElementById('editStatus').value;
+            const assignedTo = document.getElementById('editAssignedTo').value;
+            const notes = document.getElementById('editNotes').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/issues/${editingIssueId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Password': adminPassword
+                    },
+                    body: JSON.stringify({ status, assignedTo, notes })
+                });
+
+                if (response.ok) {
+                    closeEditModal();
+                    loadStats();
+                    loadIssues();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteIssue(reportId) {
+            if (!confirm('แน่ใจหรือว่าต้องการลบรายงานนี้?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/issues/${reportId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Admin-Password': adminPassword }
+                });
+
+                if (response.ok) {
+                    loadStats();
+                    loadIssues();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function getCategoryLabel(cat) {
+            const labels = {
+                water: '💧 น้ำรั่ว',
+                toilet: '🚽 ห้องน้ำ',
+                trash: '🗑️ ถังขยะ',
+                light: '💡 ไฟฟ้า',
+                hvac: '❄️ ปรับอากาศ',
+                furniture: '🪑 เฟอร์นิเจอร์',
+                parking: '🅿️ ที่จอดรถ',
+                other: '📝 อื่นๆ'
+            };
+            return labels[cat] || cat;
+        }
+
+        function getStatusLabel(status) {
+            const labels = { pending: '⏳ รอการตรวจสอบ', inprogress: '🔧 กำลังแก้ไข', resolved: '✓ แก้ไขแล้ว' };
+            return labels[status] || status;
+        }
+
+        function getStatusBadgeClass(status) {
+            const classes = { pending: 'badge-pending', inprogress: 'badge-inprogress', resolved: 'badge-resolved' };
+            return classes[status] || '';
+        }
+
+        document.getElementById('searchAdmin').addEventListener('keyup', loadIssues);
+    </script>
+</body>
+</html>
