@@ -25,7 +25,7 @@ try:
     db = client['facility-reporting']
     issues = db['issues']
 except:
-    st.error("❌ ไม่สามารถเชื่อมต่อ MongoDB")
+    st.error("ไมสามารถเชือมตอ MongoDB")
     issues = None
 
 st.title("🔧 ระบบรายงานปัญหา")
@@ -100,4 +100,28 @@ elif st.session_state.page == "admin":
         with col1:
             st.metric("📊 ทั้งหมด", len(docs))
         with col2:
-            st.metric("🟡 รอ", len(
+            pending_count = len([d for d in docs if d["status"] == "pending"])
+            st.metric("🟡 รอ", pending_count)
+        with col3:
+            inprogress_count = len([d for d in docs if d["status"] == "inprogress"])
+            st.metric("🔵 กำลังแก้", inprogress_count)
+        with col4:
+            resolved_count = len([d for d in docs if d["status"] == "resolved"])
+            st.metric("🟢 เสร็จ", resolved_count)
+        st.divider()
+        for doc in docs:
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.write(f"**#{doc['reportId']}** - {doc['location']}")
+            with col2:
+                new_status = st.selectbox("สถานะ", ["pending", "inprogress", "resolved"], key=doc['reportId'])
+                if new_status != doc['status']:
+                    issues.update_one({"reportId": doc['reportId']}, {"$set": {"status": new_status}})
+                    st.rerun()
+            with col3:
+                if st.button("🗑️", key=f"del_{doc['reportId']}"):
+                    issues.delete_one({"reportId": doc['reportId']})
+                    st.rerun()
+            st.divider()
+    elif pwd:
+        st.error("❌ ผิด")
